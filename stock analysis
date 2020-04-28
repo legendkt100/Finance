@@ -1,0 +1,73 @@
+import pandas as pd
+import quandl
+import cufflinks as cf
+import plotly as py
+from plotly.offline import iplot
+import matplotlib.pyplot as plt
+import numpy as np
+from statsmodels.tsa.seasonal import seasonal_decompose
+QUANDL_API_KEY = "Vp1DVM5ZM4hPe5ADNvq5"
+quandl.ApiConfig.api_key = QUANDL_API_KEY
+
+def get_stockdata(stock_ticker,start,end):
+    stockdata = quandl.get(stock_ticker,
+                           start_date = start,
+                           end_date = end)
+    return stockdata
+
+def returns(stockdata):
+    stockdata["Simple Returns"] = stockdata["Close"].pct_change(periods = 1)
+    stockdata["Log Returns"] = np.log(stockdata["Close"]/stockdata["Close"].shift(1))
+    return stockdata
+
+#Calculating monthly realized volatility and annualizing it 
+def realized_volatility(stockdata):
+    return np.sqrt(np.sum(stockdata["Log Returns"]**2))
+
+def realized_monthly_vol(stockdata):
+    stock_realized_volatility = stockdata.groupby(pd.Grouper(freq = "M")).apply(realized_volatility)
+    stock_realized_volatility = stock_realized_volatility*np.sqrt(12)
+    return stock_realized_volatility
+
+def stockdata_plot(stock_realized_volatility,stockdata):
+    fig,ax = plt.subplots(3,1 , figsize = (15,10))
+    ax[0].plot(stockdata["Close"])
+    ax[0].set(title = "Stock Time Series", ylabel = "Stock Price")
+    ax[1].plot(stockdata["Log Returns"])
+    ax[1].set(ylabel = "Log Returns")
+    ax[2].plot(stock_realized_volatility)
+    ax[2].set(ylabel = "Annualized monthly volatility")
+    
+#Detecting and plotting outliers
+def data_to_identify_outliers(stockdata):
+    stockdata_rolling = stockdata["Simple Returns"].rolling(window = 21).agg(["mean","std"])
+    stockdata_outliers = stockdata.join(stockdata_rolling)
+    return stockdata_outliers
+
+def identify_outliers(row, n_sigmas = 3):
+    x = row["Simple Returns"]
+    mu = row["mean"]
+    sigma = row["std"]
+    if (x > mu + 3*sigma) or (x < mu - 3*sigma):
+        return 1 
+    else: 
+        return 0
+    
+def plot_outliers(stockdata):
+    stockdata["Outliers"] = stockdata.apply(identify_outliers, axis =1)
+    outliers = stockdata.loc[stockdata["Outliers"] == 1, ["Simple Returns"]]
+    fig,ax = plt.subplots()
+    ax.plot(stockdata.index,stockdata["Simple Returns"], color = "blue", label = "Normal")
+    ax.scatter(outliers.index, outliers["Simple Returns"], color = "red", label = "Outlier")
+    ax.set_title("Stock Returns")
+    ax.legend(loc = "lower right")
+
+# Technical Analysis
+def technical_chart_plot(stockdata):
+    stockdata["Volume"] = stockdata["No. of Shares"]
+    qf = cf.QuantFig(stockdata)
+    qf.add_volume()
+    qf.add_sma(periods = 20,column = "Close", color ="red")
+    qf.add_sma(periods = 9 , column = "Close", color = "pink")
+    fig = qf.iplot(asFigure = True)
+    py.offline.plot(fig)

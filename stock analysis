@@ -243,3 +243,75 @@ def display_ef_with_selected(mean_returns, cov_matrix, risk_free_rate):
 display_calculated_ef_with_random(mean_returns, cov_matrix, num_portfolios, risk_free_rate)
 #2
 display_ef_with_selected(mean_returns, cov_matrix, risk_free_rate)
+
+#wiener process
+def wiener_process(T, N):
+    """
+    T: total time
+    N: The total number of steps
+    """
+    W0 = [0]
+    dt = T/float(N)
+    # simulate the increments by normal random variable generator
+    increments = np.random.normal(0, 1*np.sqrt(dt), N)
+    W = W0 + list(np.cumsum(increments))
+    return W
+
+def plot_wiener_process(T,N,number_sim):
+    dt = T/float(N)
+    t = np.linspace(0.0, N*dt, N+1)
+    fig = plt.figure(figsize=(15,10))
+    for i in range(number_sim):
+        W = wiener_process(T, N)
+        plt.plot(t, W)
+        plt.xlabel('time')
+        plt.ylabel('Wiener Process')
+        plt.grid(True)
+    plotly_fig = tls.mpl_to_plotly(fig)
+    plotly.offline.plot(plotly_fig)
+        
+plot_wiener_process(10,1000,10)
+
+
+#Generalized wiener process and GBM
+#T and dt unit is years
+def generalized_wiener_process_and_gbm(stock,T,dt,number_sim,flag):
+    flag = flag
+    mu = (stock["Close"][-1]/stock["Close"][1])** (365.0/len(stock["Close"])) - 1
+    sigma = (stock["Close"]/stock["Close"].shift(1)-1)[1:].std()*np.sqrt(252)
+    S0 = stock["Close"][-1]
+    steps = T/dt
+    fig = plt.figure(figsize=(15,10))
+    for j in range(number_sim):
+        price_path = [S0]
+        st = S0
+        for i in range(int(steps)):
+            if flag == 1:
+                st = st + mu*dt + sigma*np.sqrt(dt)*np.random.normal(0,1)
+            else:
+                st = st*math.exp(((mu-0.5*sigma**2)*dt + sigma*np.sqrt(dt)*np.random.normal(0, 1)))
+            price_path.append(st)
+        plt.plot(price_path)
+    plt.ylabel('stock price',fontsize=15)
+    plt.xlabel('Steps',fontsize=15)
+    plotly_fig = tls.mpl_to_plotly(fig)
+    plotly.offline.plot(plotly_fig)
+    
+generalized_wiener_process_and_gbm(hdfc,1,0.001,1000,0)
+
+#maturity in /252 days
+def mc_euro_options(stock,option_type,strike,maturity,r,num_reps):
+    sigma = (stock["Close"]/stock["Close"].shift(1)-1)[1:].std()*np.sqrt(252)
+    s0 = stock["Close"][-1]
+    payoff_sum = 0
+    for j in range(num_reps):
+        st = s0
+        st = st*math.exp(((r-0.5*sigma**2)*maturity + sigma*np.sqrt(maturity)*np.random.normal(0, 1)))
+        if option_type == 'c':
+            payoff = max(0,st-strike)
+        elif option_type == 'p':
+            payoff = max(0,strike-st)
+        payoff_sum += payoff
+    premium = (payoff_sum/float(num_reps))*math.exp((-r*maturity))
+    return premium
+mc_euro_options(hdfc,"c",900,4/252,0.04,1000000)

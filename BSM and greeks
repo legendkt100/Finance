@@ -1,0 +1,123 @@
+class BSM:
+    def __init__(self,option_type,price,strike,interest_rate,expiry,volatility,dividend_yield = 0):
+        self.s = price
+        self.k = strike
+        self.r = interest_rate #Continuous risk free rate
+        self.q = dividend_yield
+        self.T = expiry #Time to expiry in years
+        self.sigma = volatility #Annualized
+        self.type = option_type
+    def n(self,d):
+        return sp.norm.cdf(d)
+    def dn(self,d):
+        return sp.norm.pdf(d)
+    def d1(self):
+       d1 = (math.log(self.s/self.k) + (self.r - self.q + self.sigma**2 * 0.5)*self.T)/(self.sigma * np.sqrt(self.T))
+       return d1
+    def d2(self):
+        d2 =(math.log(self.s / self.k) + (self.r - self.q -self.sigma**2 * 0.5) * self.T)/(self.sigma * np.sqrt(self.T))
+        return d2
+    def bsm_price(self):
+        d1 = self.d1()
+        d2 = d1 - self.sigma * np.sqrt(self.T)
+        if self.type == "c":
+            price = math.exp(-self.r*self.T)*(self.s * math.exp((self.r - self.q)*self.T)*self.n(d1) - self.k*self.n(d2))
+        elif self.type == "p":
+            price = math.exp(-self.r*self.T) * (self.k * self.n(-d2) - (self.s * math.exp((self.r - self.q)*self.T) * self.n(-d1)))
+        else:
+            print("Please input c or p")
+        return price
+    def delta(self):
+        d1 = self.d1()
+        if self.type == "c":
+            return math.exp(-self.q*self.T)*self.n(d1)
+        elif self.type == "p":
+            return math.exp(-self.q*self.T)*(self.n(d1)-1)
+    def gamma(self):
+        d1 = self.d1()
+        dn1 = self.dn(d1)
+        return (dn1 * math.exp(-self.q * self.T))/(self.s * self.sigma * np.sqrt(self.T))
+    def vega(self):
+        d1 = self.d1()
+        dn1 = self.dn(d1)
+        return (self.s * np.sqrt(self.T) * dn1 * math.exp(-self.q * self.T))
+    def theta(self): #Annualized
+        d1 = self.d1()
+        d2 = d1 - self.sigma * np.sqrt(self.T)
+        dn1 = self.dn(d1)
+        if self.type == "c":
+            theta = -self.s * dn1 * self.sigma * math.exp(-self.q*self.T) / (2 * np.sqrt(self.T)) \
+                    + self.q * self.s * self.n(d1) * math.exp(-self.q*self.T) \
+                    - self.r * self.k * math.exp(-self.r*self.T) * self.n(d2)
+        elif self.type == "p":
+            theta = -self.s * dn1 * self.sigma * math.exp(-self.q * self.T) / (2 * np.sqrt(self.T)) \
+            - self.q * self.s * self.n(-d1) * math.exp(-self.q * self.T) \
+            + self.r * self.k * math.exp(-self.r * self.T) * self.n(-d2)
+        return theta
+    def rho(self):
+        d2 = self.d2()
+        if self.type == "c":
+            return self.k*self.T*math.exp(-self.r*self.T)*self.n(d2)
+        if self.type == "p":
+            self.k*self.T*math.exp(-self.r*self.T)*self.n(-d2)
+            
+        
+a = BSM('c', 42, 35, 0.1, 90.0/365, 0.2)
+a.theta()    
+    
+#Exploring yfinance:
+def yahoo_finance_option_chain(ticker):
+    stock = yf.Ticker(ticker)    
+    hist = stock.history()
+    ltp = stock.history().tail(1)
+    reco = stock.recommendations.tail(15)
+    institution_holdings = stock.institutional_holders
+    expiry_dates = stock.options    
+    option_chain = stock.option_chain(expiry_dates[0])    
+    call = option_chain.calls    
+    put = option_chain.puts
+    return hist,ltp,reco,institution_holdings, expiry_dates , option_chain, call, put
+  
+apple = yahoo_finance_option_chain("AAPL")
+    
+  
+def plot_greeks(greek):
+    s = np.array([range(10,70,1) for i in range(23)])
+    I = np.ones((np.shape(s)))
+    time = np.arange(1,12.5,0.5)/12
+    T = np.array([ele for ele in time for i in range(np.shape(s)[1])]).reshape(np.shape(s))    
+    contracts = []
+    for i in range(np.shape(s)[0]):
+        for j in range(np.shape(s)[1]):
+            contracts.append(BSM('c',s[i,j],40*I[i,j],0.1*I[i,j], T[i,j],0.5*I[i,j]))
+    theta = [x.theta() for x in contracts]
+    gamma = [x.gamma() for x in contracts]
+    delta = [x.delta() for x in contracts]
+    vega = [x.vega() for x in contracts]
+    rho = [x.rho() for x in contracts]
+    
+    gamma = np.array(gamma).reshape(np.shape(s))
+    delta = np.array(delta).reshape(np.shape(s))
+    theta = np.array(theta).reshape(np.shape(s))
+    vega = np.array(vega).reshape(np.shape(s))
+    rho = np.array(rho).reshape(np.shape(s))
+    z = greek 
+    fig = plt.figure(figsize=(20,11))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.view_init(40,290)
+    ax.plot_wireframe(s, T, z, rstride=1, cstride=1)
+    ax.plot_surface(s, T, z, facecolors=cm.jet(delta),linewidth=0.001, rstride=1, cstride=1, alpha = 0.75)
+    if z == theta:
+        ax.set_zlim3d(z.min(), z.max())
+    else:
+        ax.set_zlim3d(0, z.max()) 
+    ax.set_xlabel('stock price')
+    ax.set_ylabel('Time to Expiration')
+    ax.set_zlabel(greek)
+    m = cm.ScalarMappable(cmap=cm.jet)
+    m.set_array(z)
+    cbar = plt.colorbar(m)
+    
+plot_greeks(rho)
+    
+    

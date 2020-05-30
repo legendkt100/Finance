@@ -1,0 +1,96 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat May 30 17:14:45 2020
+
+@author: harsh
+"""
+
+import numpy as np
+from pylab import plt
+plt.style.use("seaborn")
+c = 10 #cash
+i = 0.1 #interest rate
+df = 1/(1+i)
+pv_1 = c*df
+cl = [-10,12.5,15,20]
+pv_l = []
+pv = 0
+for t in range(4):
+    pv = cl[t]/(1+i)**t
+    pv_l.append(pv)
+    npv = np.sum(pv_l)
+
+#using numpy
+t = np.arange(4)
+cl2 = np.array(cl)
+df = (1+i)**-t
+npv = np.sum(cl2*df)
+
+#Static two state economy
+St = np.array((20,5))
+S0 = 10.
+Bt = np.array((11.,11.)) #Risk free bond
+B0 = 10.
+Mt = np.array((St,Bt)).T
+M0 = np.array((S0,B0))
+
+#Portfolio
+phi = np.array((2,3)) #number of stocks and bonds we own
+portfolio_value_t = phi[0]*St + phi[1]*Bt
+portfolio_value_t = np.dot(Mt,phi)
+Cost_portfolio_today = phi[0]*S0 + phi[1]*B0
+Cost_portfolio_today = np.dot(M0,phi)
+
+#call option
+K = 15.
+C = np.maximum(St - K,0)
+
+#Expected return
+def ret(x,x0):
+    return x.mean()/x0 - 1
+rS = ret(St,S0)
+rB = ret(Bt,B0)
+
+#Option valuation - Wrong way
+A = C.mean()/(1+rS)
+B = C.mean()/(1+rB)
+
+#Span of traded assets
+random_number_for_allocation = np.random.random(250)
+random_number_for_allocation2 = np.random.standard_normal(250)
+random_allocations = []
+for i in random_number_for_allocation2:
+    random_allocations.append(St*i + Bt*[1-i])
+random_allocations = np.array(random_allocations)
+plt.plot(random_allocations[:,0],random_allocations[:,1],"r.")
+
+#3
+random_number_for_allocation_stock = np.random.random(250)
+random_number_for_allocation_bond = np.random.random(250)
+random_number_for_allocation_stock2 = np.random.standard_normal(2500)
+random_number_for_allocation_bond2 = np.random.standard_normal(2500)
+random_allocations = []
+for i in range(len(random_number_for_allocation_stock2)):
+    random_allocations.append(St*random_number_for_allocation_stock2[i] + Bt*random_number_for_allocation_bond2[i])
+random_allocations = np.array(random_allocations)
+plt.plot(random_allocations[:,0],random_allocations[:,1],"r.")
+
+#Replication of the Option payoff
+phi = np.linalg.solve(Mt,C)
+#Solution to the system ax = b
+final_allocations = np.dot(Mt,phi).round(5)
+C0 = np.dot(M0,phi)
+
+Appropriate_Discount_Rate = ret(C,C0).round(3)
+C.mean()/(1+0.375)
+
+#Risk Return
+def vol(x,x0):
+    return (x/x0 -1).std()
+
+vol(St,S0)
+vol(B,B0)
+vol(C,C0)
+ret(St,S0)
+ret(B,B0)
+ret(C,C0)
